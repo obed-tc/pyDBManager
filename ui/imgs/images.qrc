@@ -1,0 +1,11 @@
+<RCC>
+  <qresource prefix="img">
+    <file>check.png</file>
+    <file>error.png</file>
+    <file>reset.png</file>
+    <file>button.png</file>
+    <file>play.png</file>
+    <file>logo.png</file>
+    <file>fondo.png</file>
+  </qresource>
+</RCC>
