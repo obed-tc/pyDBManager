@@ -1,10 +1,19 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 import mysql.connector
-
+from PyQt5.QtGui import QStandardItemModel, QStandardItem
+from PyQt5.QtWidgets import QTableView
+import re
+import ast
+data_array = [
+    {"ID": 1, "Nombre": "Juan", "Edad": 25},
+    {"ID": 2, "Nombre": "Daniel", "Edad": 23}
+]
 class Ui_Interface(object):
+    
     def __init__(self):
         self.selected_checkbox = None
         self.db_cursor = None 
+        self.datos=None
     def execute_selected_query(self, query):
         if self.selected_checkbox == self.radioButton_DDL:
             return self.execute_ddl_query(query)
@@ -20,7 +29,7 @@ class Ui_Interface(object):
                 if self.db_connection is not None and self.db_connection.is_connected():
                         self.db_cursor = self.db_connection.cursor()
 
-                        if query.strip().upper().startswith(("CREATE", "ALTER","DROP")):
+                        if query.strip().upper().startswith(("CREATE", "ALTER","DROP","SHOW")):
                                 self.db_cursor.execute(query)
                                 resultados = self.db_cursor.fetchall()
                                 return f"{query}\nConsulta DDL ejecutada con éxito:\n{str(resultados)}"
@@ -40,9 +49,10 @@ class Ui_Interface(object):
         try:
                 if self.db_connection is not None and self.db_connection.is_connected():
                         self.db_cursor = self.db_connection.cursor()
-                        if query.strip().upper().startswith(("SELECT","INSERT", "UPDATE", "DELETE")):
+                        if query.strip().upper().startswith(("SELECT","INSERT", "UPDATE", "DELETE","SHOW","FLUSH")):
                                 self.db_cursor.execute(query)
                                 resultados = self.db_cursor.fetchall()
+                                print("Resultados:",resultados)
                                 return f"{query}\nConsulta DML ejecutada con éxito:\n{str(resultados)}"
                         else:
                                 return "Error: Consulta DML debe comenzar con 'SELECT','INSERT', 'UPDATE' o 'DELETE'."
@@ -59,7 +69,7 @@ class Ui_Interface(object):
         try:
                 if self.db_connection is not None and self.db_connection.is_connected():
                         self.db_cursor = self.db_connection.cursor()
-                        if query.strip().upper().startswith(("GRANT", "REVOKE")):
+                        if query.strip().upper().startswith(("GRANT", "REVOKE","SHOW")):
                                 self.db_cursor.execute(query)
                                 resultados = self.db_cursor.fetchall()
                                 return f"{query}\nConsulta DCL ejecutada con éxito:\n{str(resultados)}"
@@ -81,7 +91,28 @@ class Ui_Interface(object):
             return
         if self.selected_checkbox is not None:
             result = self.execute_selected_query(query)
-            self.textEdit_output.setPlainText(result)
+            matches = re.search(r'\[([^]]+)\]', result)
+            if matches:
+                self.textEdit_output.hide()
+
+                contenido_corchetes = matches.group(0)
+                try:
+                        array_resultado = ast.literal_eval(contenido_corchetes)
+                        self.datos=array_resultado
+                        print("Data:",self.datos)
+
+                        self.setup_table_view(self.verticalWidget, self.datos)
+
+                except (SyntaxError, ValueError) as e:
+                        print("Error al convertir:", e)
+                        self.textEdit_output.show()
+                        self.textEdit_output.setPlainText(result)
+
+
+            else:
+                self.textEdit_output.show()
+                self.clear_table_view()
+                self.textEdit_output.setPlainText(result)
         else:
             self.textEdit_output.setPlainText("Error: selecciona una opcion")
             return
@@ -101,7 +132,45 @@ class Ui_Interface(object):
                         return False
         except mysql.connector.Error as error:
                 return False
+    def clear_table_view(self):
+        if hasattr(self, 'table_view') and self.table_view is not None:
+                parent_layout = self.verticalLayout_2
+                parent_layout.removeWidget(self.table_view)
+
+                self.table_view.deleteLater()
+                self.table_view = None
+
+
+    def setup_table_view(self, parent_widget, data_array):
+        self.clear_table_view()
+        self.table_view = QTableView(parent_widget)
+        self.table_view.setObjectName("tableView")
+
+        # Configurar un modelo de datos para la tabla
+        self.table_model = QStandardItemModel(self.table_view)
+
+        # Obtener encabezados de columnas basados en los índices de la primera fila en el array
+        if data_array:
+                column_headers = [f"Columna {i}" for i in range(len(data_array[0]))]
+                self.table_model.setHorizontalHeaderLabels(column_headers)
+
+        # Poblar el modelo con datos del array de arrays
+        for row_data in data_array:
+                items = [QStandardItem(str(value)) for value in row_data]
+                self.table_model.appendRow(items)
+
+        # Establecer el modelo para la vista de la tabla
+        self.table_view.setModel(self.table_model)
+
+        # Agregar la vista de la tabla al diseño vertical
+        parent_layout = parent_widget.layout()
+        parent_layout.addWidget(self.table_view)
+
+
     def clear_fields(self):
+        self.clear_table_view()
+        self.textEdit_output.show()
+
         self.textEdit_input.clear()
         self.textEdit_output.clear()
         self.radioButton_DDL.setChecked(False)
@@ -281,6 +350,10 @@ class Ui_Interface(object):
         self.textEdit_output.setUndoRedoEnabled(False)
         self.textEdit_output.setObjectName("textEdit_output")
         self.verticalLayout_2.addWidget(self.textEdit_output)
+        if (self.datos!=None):
+              self.setup_table_view(self.verticalWidget, self.datos)
+
+
         self.horizontalLayout_4.addWidget(self.verticalWidget)
         spacerItem2 = QtWidgets.QSpacerItem(189, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.horizontalLayout_4.addItem(spacerItem2)
